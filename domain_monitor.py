@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import logging
 import os
 import time
@@ -118,7 +119,7 @@ def calculate_success_rate(results: list[CheckResult]) -> float:
 def build_alert_message(results: list[CheckResult], success_rate: float) -> str:
     failed_results = [result for result in results if not result.success]
     lines = [
-        "[告警] 域名连通率低于 90%",
+        "<b>[告警] 域名连通率低于 90%</b>",
         f"整体连通率: {success_rate * 100:.2f}%",
         "失败明细:",
     ]
@@ -126,18 +127,23 @@ def build_alert_message(results: list[CheckResult], success_rate: float) -> str:
     for result in failed_results:
         response_time_ms = "N/A" if result.response_time_ms is None else str(result.response_time_ms)
         lines.append(
-            f"- 失败时间: {result.checked_at} | 域名: {result.domain} | 失败原因: {result.failure_reason} | 响应时间(ms): {response_time_ms}"
+            "- "
+            f"失败时间: {html.escape(result.checked_at)} | "
+            f"域名: {html.escape(result.domain)} | "
+            f"失败原因: {html.escape(result.failure_reason or 'unknown')} | "
+            f"响应时间(ms): {html.escape(response_time_ms)}"
         )
 
     return "\n".join(lines)
 
 
-def send_telegram_alert(session: requests.Session, message: str) -> None:
+def send_telegram_message(session: requests.Session, message: str) -> None:
     response = session.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
+            "parse_mode": "HTML",
             "disable_web_page_preview": True,
         },
         timeout=TELEGRAM_TIMEOUT_SECONDS,
@@ -146,6 +152,30 @@ def send_telegram_alert(session: requests.Session, message: str) -> None:
     payload = response.json()
     if not payload.get("ok"):
         raise RuntimeError(f"Telegram API returned ok=false: {payload}")
+
+
+def send_telegram_alert(session: requests.Session, message: str) -> None:
+    max_length = 3500
+    if len(message) <= max_length:
+        send_telegram_message(session, message)
+        return
+
+    lines = message.splitlines()
+    chunk: list[str] = []
+    chunk_length = 0
+
+    for line in lines:
+        line_length = len(line) + 1
+        if chunk and chunk_length + line_length > max_length:
+            send_telegram_message(session, "\n".join(chunk))
+            chunk = [line]
+            chunk_length = len(line)
+        else:
+            chunk.append(line)
+            chunk_length += line_length
+
+    if chunk:
+        send_telegram_message(session, "\n".join(chunk))
 
 
 def main() -> int:
