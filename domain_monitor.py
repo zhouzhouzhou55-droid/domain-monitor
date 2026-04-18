@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -136,9 +137,9 @@ def build_alert_message(results: list[CheckResult], success_rate: float) -> str:
     return "\n".join(lines)
 
 
-def send_telegram_message(session: requests.Session, message: str) -> None:
+def send_telegram_message(message: str) -> None:
     print(message)
-    response = session.post(
+    response = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={
             "chat_id": TELEGRAM_CHAT_ID,
@@ -147,16 +148,16 @@ def send_telegram_message(session: requests.Session, message: str) -> None:
         },
         timeout=TELEGRAM_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
-    payload = response.json()
-    if not payload.get("ok"):
-        raise RuntimeError(f"Telegram API returned ok=false: {payload}")
+    print(response.text)
+    if response.status_code != 200:
+        print(f"Telegram send failed with status {response.status_code}")
+        sys.exit(1)
 
 
-def send_telegram_alert(session: requests.Session, message: str) -> None:
+def send_telegram_alert(message: str) -> None:
     max_length = 3500
     if len(message) <= max_length:
-        send_telegram_message(session, message)
+        send_telegram_message(message)
         return
 
     lines = message.splitlines()
@@ -166,7 +167,7 @@ def send_telegram_alert(session: requests.Session, message: str) -> None:
     for line in lines:
         line_length = len(line) + 1
         if chunk and chunk_length + line_length > max_length:
-            send_telegram_message(session, "\n".join(chunk))
+            send_telegram_message("\n".join(chunk))
             chunk = [line]
             chunk_length = len(line)
         else:
@@ -174,7 +175,7 @@ def send_telegram_alert(session: requests.Session, message: str) -> None:
             chunk_length += line_length
 
     if chunk:
-        send_telegram_message(session, "\n".join(chunk))
+        send_telegram_message("\n".join(chunk))
 
 
 def main() -> int:
@@ -197,7 +198,7 @@ def main() -> int:
 
     if success_rate < SUCCESS_RATE_THRESHOLD:
         message = build_alert_message(results, success_rate)
-        send_telegram_alert(session, message)
+        send_telegram_alert(message)
         logging.warning("Alert sent to Telegram")
     else:
         logging.info("No alert sent")
