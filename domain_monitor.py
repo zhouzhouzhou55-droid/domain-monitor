@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import logging
 import os
 import time
@@ -119,7 +118,7 @@ def calculate_success_rate(results: list[CheckResult]) -> float:
 def build_alert_message(results: list[CheckResult], success_rate: float) -> str:
     failed_results = [result for result in results if not result.success]
     lines = [
-        "<b>[告警] 域名连通率低于 90%</b>",
+        "[告警] 域名连通率低于 90%",
         f"整体连通率: {success_rate * 100:.2f}%",
         "失败明细:",
     ]
@@ -128,22 +127,22 @@ def build_alert_message(results: list[CheckResult], success_rate: float) -> str:
         response_time_ms = "N/A" if result.response_time_ms is None else str(result.response_time_ms)
         lines.append(
             "- "
-            f"失败时间: {html.escape(result.checked_at)} | "
-            f"域名: {html.escape(result.domain)} | "
-            f"失败原因: {html.escape(result.failure_reason or 'unknown')} | "
-            f"响应时间(ms): {html.escape(response_time_ms)}"
+            f"失败时间: {result.checked_at} | "
+            f"域名: {result.domain} | "
+            f"失败原因: {result.failure_reason or 'unknown'} | "
+            f"响应时间(ms): {response_time_ms}"
         )
 
     return "\n".join(lines)
 
 
 def send_telegram_message(session: requests.Session, message: str) -> None:
+    print(message)
     response = session.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
-            "parse_mode": "HTML",
             "disable_web_page_preview": True,
         },
         timeout=TELEGRAM_TIMEOUT_SECONDS,
